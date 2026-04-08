@@ -10,10 +10,11 @@ local AssetTypes = {
     [1] = "Image", [2] = "T-Shirt", [3] = "Audio", [4] = "Mesh", [5] = "Lua",
     [8] = "Hat", [9] = "Place", [10] = "Model", [11] = "Shirt", [12] = "Pants",
     [13] = "Decal", [17] = "Head", [18] = "Face", [19] = "Gear", [21] = "Badge",
-    [24] = "Animation", [38] = "Plugin", [40] = "MeshPart", [61] = "Emote", [62] = "Video"
+    [24] = "Animation", [38] = "Plugin", 
+    [40] = "MeshPart", [61] = "Emote", [62] = "Video"
 }
 
--- Mapping for File Extensions (Changed [62] to .mp4)
+-- Mapping for File Extensions
 local ExtensionMap = {
     [1] = ".png", [2] = ".png", [3] = ".mp3", [11] = ".png", 
     [12] = ".png", [13] = ".png", [62] = ".mp4", ["Default"] = ".rbxm"
@@ -58,21 +59,22 @@ ScreenGui.Name = "RayfieldAssetBrowser"
 ScreenGui.Parent = Parent
 
 local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 450, 0, 500)
-MainFrame.Position = UDim2.new(0.5, -225, 0.5, -250)
+MainFrame.Size = UDim2.new(0, 450, 0, 520)
+MainFrame.Position = UDim2.new(0.5, -225, 0.5, -260)
 MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 MainFrame.Active = true
 MainFrame.Draggable = true
+MainFrame.ClipsDescendants = true -- Added for smooth minimizing
 MainFrame.Parent = ScreenGui
 Instance.new("UICorner").Parent = MainFrame
 
 local TitleLabel = Instance.new("TextLabel")
-TitleLabel.Size = UDim2.new(1, -40, 0, 40)
+TitleLabel.Size = UDim2.new(1, -75, 0, 40)
 TitleLabel.Position = UDim2.new(0, 15, 0, 0)
 TitleLabel.BackgroundTransparency = 1
 TitleLabel.Text = "Roblox Asset Viewer"
 TitleLabel.TextColor3 = Color3.new(1, 1, 1)
-TitleLabel.Font = Enum.Font.GothamBold
+TitleLabel.Font = Enum.Font.GothamBold -- Unified Font
 TitleLabel.TextSize = 16
 TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
 TitleLabel.Parent = MainFrame
@@ -83,7 +85,32 @@ CloseBtn.Position = UDim2.new(1, -35, 0, 5)
 CloseBtn.Text = "X"
 CloseBtn.TextColor3 = Color3.new(1, 1, 1)
 CloseBtn.BackgroundTransparency = 1
+CloseBtn.Font = Enum.Font.GothamBold -- Unified Font
+CloseBtn.TextSize = 14
 CloseBtn.Parent = MainFrame
+
+-- Added Minimize Button
+local MinBtn = Instance.new("TextButton")
+MinBtn.Size = UDim2.new(0, 30, 0, 30)
+MinBtn.Position = UDim2.new(1, -70, 0, 5)
+MinBtn.Text = "-"
+MinBtn.TextColor3 = Color3.new(1, 1, 1)
+MinBtn.BackgroundTransparency = 1
+MinBtn.Font = Enum.Font.GothamBold
+MinBtn.TextSize = 16
+MinBtn.Parent = MainFrame
+
+local isMinimized = false
+MinBtn.MouseButton1Click:Connect(function()
+    isMinimized = not isMinimized
+    if isMinimized then
+        MinBtn.Text = "+"
+        TweenService:Create(MainFrame, TweenInfo.new(0.3), {Size = UDim2.new(0, 450, 0, 40)}):Play()
+    else
+        MinBtn.Text = "-"
+        TweenService:Create(MainFrame, TweenInfo.new(0.3), {Size = UDim2.new(0, 450, 0, 520)}):Play()
+    end
+end)
 
 local IdInput = Instance.new("TextBox")
 IdInput.Size = UDim2.new(1, -110, 0, 40)
@@ -92,7 +119,8 @@ IdInput.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 IdInput.PlaceholderText = "Enter Asset ID..."
 IdInput.Text = ""
 IdInput.TextColor3 = Color3.new(1, 1, 1)
-IdInput.Font = Enum.Font.Gotham
+IdInput.Font = Enum.Font.GothamBold -- Unified Font
+IdInput.TextSize = 13
 IdInput.Parent = MainFrame
 Instance.new("UICorner").Parent = IdInput
 
@@ -102,7 +130,8 @@ AssetSearchBtn.Position = UDim2.new(1, -95, 0, 45)
 AssetSearchBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
 AssetSearchBtn.Text = "Search"
 AssetSearchBtn.TextColor3 = Color3.new(1, 1, 1)
-AssetSearchBtn.Font = Enum.Font.GothamBold
+AssetSearchBtn.Font = Enum.Font.GothamBold -- Unified Font
+AssetSearchBtn.TextSize = 13
 AssetSearchBtn.Parent = MainFrame
 Instance.new("UICorner").Parent = AssetSearchBtn
 
@@ -112,7 +141,7 @@ StatusLabel.Position = UDim2.new(0, 15, 0, 95)
 StatusLabel.BackgroundTransparency = 1
 StatusLabel.Text = "Awaiting Search..."
 StatusLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
-StatusLabel.Font = Enum.Font.Gotham
+StatusLabel.Font = Enum.Font.GothamBold -- Unified Font
 StatusLabel.TextSize = 13
 StatusLabel.TextWrapped = true
 StatusLabel.Parent = MainFrame
@@ -160,15 +189,14 @@ VideoPreview.Visible = false
 VideoPreview.Parent = PreviewContainer
 Instance.new("UICorner").Parent = VideoPreview
 
--- Fixed Aspect Ratio logic
 local VideoAspect = Instance.new("UIAspectRatioConstraint")
 VideoAspect.DominantAxis = Enum.DominantAxis.Width
 VideoAspect.AspectType = Enum.AspectType.FitWithinMaxSize
 VideoAspect.Parent = VideoPreview
-----------------------------------
 
+--- MEDIA CONTROLS (Underneath Image) ---
 local AudioFrame = Instance.new("Frame")
-AudioFrame.Size = UDim2.new(1, -30, 0, 40)
+AudioFrame.Size = UDim2.new(1, -30, 0, 45)
 AudioFrame.Position = UDim2.new(0, 15, 0, 325)
 AudioFrame.BackgroundTransparency = 1
 AudioFrame.Visible = false
@@ -182,7 +210,8 @@ PlayBtn.Size = UDim2.new(0.25, 0, 1, 0)
 PlayBtn.BackgroundColor3 = Color3.fromRGB(40, 200, 100)
 PlayBtn.Text = "Play"
 PlayBtn.TextColor3 = Color3.new(1, 1, 1)
-PlayBtn.Font = Enum.Font.GothamBold
+PlayBtn.Font = Enum.Font.GothamBold -- Unified Font
+PlayBtn.TextSize = 13
 PlayBtn.Parent = AudioFrame
 Instance.new("UICorner").Parent = PlayBtn
 
@@ -203,13 +232,46 @@ StopBtn.Position = UDim2.new(0.75, 0, 0, 0)
 StopBtn.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
 StopBtn.Text = "Stop"
 StopBtn.TextColor3 = Color3.new(1, 1, 1)
-StopBtn.Font = Enum.Font.GothamBold
+StopBtn.Font = Enum.Font.GothamBold -- Unified Font
+StopBtn.TextSize = 13
 StopBtn.Parent = AudioFrame
 Instance.new("UICorner").Parent = StopBtn
 
+--- EXTRA ACTIONS SECTION (Workspace/Preview) ---
+local ExtraFrame = Instance.new("Frame")
+ExtraFrame.Size = UDim2.new(1, -30, 0, 45)
+ExtraFrame.Position = UDim2.new(0, 15, 0, 345) -- Set absolute offset to prevent minimize overlap
+ExtraFrame.BackgroundTransparency = 1
+ExtraFrame.Parent = MainFrame
+
+local WorkspaceActionBtn = Instance.new("TextButton")
+WorkspaceActionBtn.Size = UDim2.new(1, 0, 1, 0) 
+WorkspaceActionBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+WorkspaceActionBtn.Text = "Preview"
+WorkspaceActionBtn.TextColor3 = Color3.new(1, 1, 1)
+WorkspaceActionBtn.Font = Enum.Font.GothamBold -- Unified Font
+WorkspaceActionBtn.TextSize = 14
+WorkspaceActionBtn.Visible = false
+WorkspaceActionBtn.Parent = ExtraFrame
+Instance.new("UICorner").Parent = WorkspaceActionBtn
+
+-- Delete Model Button (Added for Model types)
+local DeleteModelBtn = Instance.new("TextButton")
+DeleteModelBtn.Size = UDim2.new(1, 0, 1, 0) 
+DeleteModelBtn.Position = UDim2.new(0, 0, 0, 50)
+DeleteModelBtn.BackgroundColor3 = Color3.fromRGB(80, 30, 30)
+DeleteModelBtn.Text = "Delete Model"
+DeleteModelBtn.TextColor3 = Color3.new(1, 1, 1)
+DeleteModelBtn.Font = Enum.Font.GothamBold
+DeleteModelBtn.TextSize = 14
+DeleteModelBtn.Visible = false
+DeleteModelBtn.Parent = ExtraFrame
+Instance.new("UICorner").Parent = DeleteModelBtn
+
+--- BOTTOM PERSISTENT ACTIONS ---
 local ActionFrame = Instance.new("Frame")
 ActionFrame.Size = UDim2.new(1, -30, 0, 45)
-ActionFrame.Position = UDim2.new(0, 15, 1, -60)
+ActionFrame.Position = UDim2.new(0, 15, 0, 460) -- Changed to absolute offset so it hides on minimize
 ActionFrame.BackgroundTransparency = 1
 ActionFrame.Parent = MainFrame
 
@@ -218,6 +280,8 @@ CopyBtn.Size = UDim2.new(0.48, 0, 1, 0)
 CopyBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
 CopyBtn.Text = "Copy ID"
 CopyBtn.TextColor3 = Color3.new(1, 1, 1)
+CopyBtn.Font = Enum.Font.GothamBold -- Unified Font
+CopyBtn.TextSize = 14
 CopyBtn.Parent = ActionFrame
 Instance.new("UICorner").Parent = CopyBtn
 
@@ -227,11 +291,14 @@ SaveBtn.Position = UDim2.new(0.52, 0, 0, 0)
 SaveBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
 SaveBtn.Text = "Download Asset"
 SaveBtn.TextColor3 = Color3.new(1, 1, 1)
+SaveBtn.Font = Enum.Font.GothamBold -- Unified Font
+SaveBtn.TextSize = 14
 SaveBtn.Parent = ActionFrame
 Instance.new("UICorner").Parent = SaveBtn
 
 local currentAssetId = ""
 local currentAssetInfo = nil
+local spawnedObjects = {} -- Track models for deletion
 
 local function formatTime(seconds)
     local mins = math.floor(seconds / 60)
@@ -277,6 +344,13 @@ AssetSearchBtn.MouseButton1Click:Connect(function()
     VideoPreview.Visible = false
     AudioFrame.Visible = false
     AssetPreview.Visible = true 
+    WorkspaceActionBtn.Visible = false
+    DeleteModelBtn.Visible = false
+    
+    if getgenv().CurrentPreviewTrack then
+        getgenv().CurrentPreviewTrack:Stop()
+        getgenv().CurrentPreviewTrack = nil
+    end
     
     StatusLabel.Text = "Searching..."
     LoadingIcon.Visible = true
@@ -299,11 +373,23 @@ AssetSearchBtn.MouseButton1Click:Connect(function()
             AssetPreview.ImageTransparency = 0
             AssetPreview.BackgroundTransparency = 0 
             
-            if data.Info.AssetType == 3 then
+            local atype = data.Info.AssetType
+            
+            -- Handle dynamic button positioning using pure offset limits so minimize works cleanly
+            local isModel = (atype == 10 or atype == 4 or atype == 8 or atype == 19 or atype == 40 or atype == 61)
+            if isModel then
+                ExtraFrame.Position = UDim2.new(0, 15, 0, 345) 
+                DeleteModelBtn.Visible = true
+            else
+                ExtraFrame.Position = UDim2.new(0, 15, 0, 410) 
+                DeleteModelBtn.Visible = false
+            end
+
+            if atype == 3 then
                 AudioPlayer.SoundId = "rbxassetid://" .. currentAssetId
                 AudioFrame.Visible = true
                 VideoPreview.Visible = false
-            elseif data.Info.AssetType == 62 then
+            elseif atype == 62 then
                 VideoPreview.Video = "rbxassetid://" .. currentAssetId
                 VideoPreview.Visible = true
                 AudioFrame.Visible = true
@@ -312,6 +398,21 @@ AssetSearchBtn.MouseButton1Click:Connect(function()
                     repeat task.wait() until VideoPreview.Resolution ~= Vector2.new(0,0)
                     VideoAspect.AspectRatio = VideoPreview.Resolution.X / VideoPreview.Resolution.Y
                 end)
+            elseif atype == 24 then
+                WorkspaceActionBtn.Text = "Play Animation"
+                WorkspaceActionBtn.Visible = true
+            elseif atype == 2 or atype == 11 or atype == 12 then
+                WorkspaceActionBtn.Text = "Spawn Avatar Preview"
+                WorkspaceActionBtn.Visible = true
+            elseif atype == 1 then
+                WorkspaceActionBtn.Text = "Spawn Preview Part"
+                WorkspaceActionBtn.Visible = true
+            elseif atype == 13 then
+                -- Do nothing for decals as requested
+                WorkspaceActionBtn.Visible = false
+            elseif isModel then
+                WorkspaceActionBtn.Text = "Spawn Model"
+                WorkspaceActionBtn.Visible = true
             end
         else
             AssetPreview.Image = "rbxassetid://0"
@@ -334,15 +435,12 @@ local function toggleMedia()
                 PlayBtn.Text = "Pause"
             end
         elseif currentAssetInfo.AssetType == 3 then
-            if AudioPlayer.IsPlaying then 
+            if AudioPlayer.Playing then 
                 AudioPlayer:Pause() 
                 PlayBtn.Text = "Play"
             else 
-                if AudioPlayer.IsPaused then
-                    AudioPlayer:Resume()
-                else
-                    AudioPlayer:Play()
-                end
+                -- FIX: Use Resume() so it doesn't restart from the beginning
+                AudioPlayer:Resume() 
                 PlayBtn.Text = "Pause"
             end
         end
@@ -358,12 +456,13 @@ TimeLabel.InputBegan:Connect(function(input)
 end)
 
 StopBtn.MouseButton1Click:Connect(function() 
-    AudioPlayer:Stop() 
-    AudioPlayer.Playing = false
-    AudioPlayer.TimePosition = 0
+    -- Fix: Explicitly reset TimePosition for Audio as well as Video
+    AudioPlayer:Stop()
+    AudioPlayer.TimePosition = 0 
     
     VideoPreview.Playing = false
     VideoPreview.TimePosition = 0
+    
     PlayBtn.Text = "Play"
 end)
 
@@ -373,6 +472,107 @@ CopyBtn.MouseButton1Click:Connect(function()
         CopyBtn.Text = "Copied!"
         task.wait(1)
         CopyBtn.Text = "Copy ID"
+    end
+end)
+
+-- Delete Model Functionality
+DeleteModelBtn.MouseButton1Click:Connect(function()
+    for i, obj in ipairs(spawnedObjects) do
+        if obj then obj:Destroy() end
+    end
+    spawnedObjects = {}
+    DeleteModelBtn.Text = "Deleted!"
+    task.wait(1)
+    DeleteModelBtn.Text = "Delete Model"
+end)
+
+WorkspaceActionBtn.MouseButton1Click:Connect(function()
+    if not currentAssetInfo then return end
+    local assetType = currentAssetInfo.AssetType
+    local player = Players.LocalPlayer
+    local char = player.Character or player.CharacterAdded:Wait()
+    local hrp = char:WaitForChild("HumanoidRootPart")
+    local spawnCFrame = hrp.CFrame * CFrame.new(0, 0, -5)
+
+    if assetType == 24 then -- Animation Preview
+        if getgenv().CurrentPreviewTrack then
+            getgenv().CurrentPreviewTrack:Stop()
+            getgenv().CurrentPreviewTrack = nil
+            WorkspaceActionBtn.Text = "Play Animation"
+        else
+            local anim = Instance.new("Animation")
+            anim.AnimationId = "rbxassetid://" .. currentAssetId
+            local humanoid = char:FindFirstChild("Humanoid")
+            if humanoid then
+                local animator = humanoid:FindFirstChild("Animator") or Instance.new("Animator", humanoid)
+                local track = animator:LoadAnimation(anim)
+                track:Play()
+                getgenv().CurrentPreviewTrack = track
+                WorkspaceActionBtn.Text = "Stop Animation"
+            end
+        end
+    elseif assetType == 2 or assetType == 11 or assetType == 12 then -- Spawn Clothing on Grey Avatar
+        local desc = Instance.new("HumanoidDescription")
+        if assetType == 2 then desc.GraphicTShirt = tonumber(currentAssetId)
+        elseif assetType == 11 then desc.Shirt = tonumber(currentAssetId)
+        elseif assetType == 12 then desc.Pants = tonumber(currentAssetId)
+        end
+        
+        local success, dummy = pcall(function()
+            return Players:CreateHumanoidModelFromDescription(desc, Enum.HumanoidRigType.R15)
+        end)
+        
+        if success and dummy then
+            -- Make dummy grey
+            for _, part in ipairs(dummy:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.Color = Color3.fromRGB(163, 162, 165)
+                end
+            end
+            dummy:SetPrimaryPartCFrame(spawnCFrame * CFrame.Angles(0, math.pi, 0))
+            dummy.Parent = workspace
+            table.insert(spawnedObjects, dummy)
+            WorkspaceActionBtn.Text = "Spawned Dummy!"
+            game.Debris:AddItem(dummy, 15)
+        else
+            WorkspaceActionBtn.Text = "Failed to load"
+        end
+        task.wait(1.5)
+        WorkspaceActionBtn.Text = "Spawn Avatar Preview"
+        
+    elseif assetType == 1 then -- Spawn Part with Decal (Image type only)
+        local part = Instance.new("Part")
+        part.Size = Vector3.new(4, 4, 1)
+        part.CFrame = spawnCFrame
+        part.Anchored = true
+        part.CanCollide = false
+        part.Parent = workspace
+        local decal = Instance.new("Decal")
+        decal.Face = Enum.NormalId.Front
+        decal.Texture = "rbxassetid://" .. currentAssetId
+        decal.Parent = part
+        table.insert(spawnedObjects, part)
+        game.Debris:AddItem(part, 15)
+        WorkspaceActionBtn.Text = "Spawned!"
+        task.wait(1)
+        WorkspaceActionBtn.Text = "Spawn Preview Part"
+    elseif assetType == 10 or assetType == 4 or assetType == 8 or assetType == 19 or assetType == 40 or assetType == 61 then -- Spawn Model
+        local success, objects = pcall(function() return game:GetObjects("rbxassetid://" .. currentAssetId) end)
+        if success and objects then
+            for _, obj in ipairs(objects) do
+                if obj:IsA("Model") then obj:MoveTo(spawnCFrame.Position)
+                elseif obj:IsA("BasePart") or obj:IsA("Accoutrement") then
+                    if obj:IsA("BasePart") then obj.CFrame = spawnCFrame end
+                end
+                obj.Parent = workspace
+                table.insert(spawnedObjects, obj)
+            end
+            WorkspaceActionBtn.Text = "Spawned!"
+        else
+            WorkspaceActionBtn.Text = "Failed/Restricted"
+        end
+        task.wait(1.5)
+        WorkspaceActionBtn.Text = "Spawn Model"
     end
 end)
 
@@ -403,7 +603,6 @@ SaveBtn.MouseButton1Click:Connect(function()
         local rawData = nil
         local reqFunc = (syn and syn.request) or (http and http.request) or http_request or request
 
-        -- Attempt download
         if reqFunc then
             local success, response = pcall(function()
                 return reqFunc({
@@ -417,7 +616,6 @@ SaveBtn.MouseButton1Click:Connect(function()
             end
         end
 
-        -- Secondary Fallback
         if not rawData then
             pcall(function() 
                 local res = game:HttpGet(url)
@@ -425,7 +623,6 @@ SaveBtn.MouseButton1Click:Connect(function()
             end)
         end
 
-        -- Result Handling
         if rawData then
             local writeSuccess = pcall(function() writefile(fileName, rawData) end)
             if writeSuccess then
@@ -436,15 +633,13 @@ SaveBtn.MouseButton1Click:Connect(function()
                 SaveBtn.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
             end
         else
-            -- Download Failed -> Show "Denied"
             SaveBtn.Text = "Denied"
             SaveBtn.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
             task.wait(1)
             
-            -- Attempt Image Download Instead
             SaveBtn.Text = "Downloading image..."
             SaveBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
-            
+        
             local thumbData = nil
             pcall(function()
                 local thumbApiUrl = "https://thumbnails.roblox.com/v1/assets?assetIds=" .. currentAssetId .. "&returnPolicy=PlaceHolder&size=420x420&format=Png&isCircular=false"
@@ -478,7 +673,7 @@ SaveBtn.MouseButton1Click:Connect(function()
                 local thumbFileName = string.format("AssetViewer/%s_%s_Preview.png", safeName, currentAssetId)
                 local writeSuccess = pcall(function() writefile(thumbFileName, thumbData) end)
                 if writeSuccess then
-task.wait(1)
+                    task.wait(1)
                     SaveBtn.Text = "Saved to files!"
                     SaveBtn.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
                 else
@@ -500,5 +695,9 @@ end)
 CloseBtn.MouseButton1Click:Connect(function()
     AudioPlayer:Stop()
     VideoPreview.Playing = false
+    if getgenv().CurrentPreviewTrack then
+        getgenv().CurrentPreviewTrack:Stop()
+        getgenv().CurrentPreviewTrack = nil
+    end
     ScreenGui:Destroy()
 end)
