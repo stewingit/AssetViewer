@@ -13,7 +13,7 @@ local AssetTypes = {
     [24] = "Animation", [38] = "Plugin", [40] = "MeshPart", [61] = "Emote", [62] = "Video"
 }
 
--- Mapping for File Extensions
+-- Mapping for File Extensions (Changed [62] to .mp4)
 local ExtensionMap = {
     [1] = ".png", [2] = ".png", [3] = ".mp3", [11] = ".png", 
     [12] = ".png", [13] = ".png", [62] = ".mp4", ["Default"] = ".rbxm"
@@ -70,7 +70,7 @@ local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Size = UDim2.new(1, -40, 0, 40)
 TitleLabel.Position = UDim2.new(0, 15, 0, 0)
 TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "Roblox Universal Asset Browser"
+TitleLabel.Text = "Roblox Asset Viewer"
 TitleLabel.TextColor3 = Color3.new(1, 1, 1)
 TitleLabel.Font = Enum.Font.GothamBold
 TitleLabel.TextSize = 16
@@ -119,7 +119,7 @@ StatusLabel.Parent = MainFrame
 
 --- PREVIEW & LOADING SECTION ---
 local PreviewContainer = Instance.new("Frame")
-PreviewContainer.Size = UDim2.new(0, 340, 0, 190) -- Increased size to fit the area better
+PreviewContainer.Size = UDim2.new(0, 340, 0, 190)
 PreviewContainer.Position = UDim2.new(0.5, -170, 0, 125)
 PreviewContainer.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
 PreviewContainer.Parent = MainFrame
@@ -276,7 +276,7 @@ AssetSearchBtn.MouseButton1Click:Connect(function()
     PlayBtn.Text = "Play" 
     VideoPreview.Visible = false
     AudioFrame.Visible = false
-    AssetPreview.Visible = true -- Default to visible
+    AssetPreview.Visible = true 
     
     StatusLabel.Text = "Searching..."
     LoadingIcon.Visible = true
@@ -299,16 +299,15 @@ AssetSearchBtn.MouseButton1Click:Connect(function()
             AssetPreview.ImageTransparency = 0
             AssetPreview.BackgroundTransparency = 0 
             
-            if data.Info.AssetType == 3 then -- Audio
+            if data.Info.AssetType == 3 then
                 AudioPlayer.SoundId = "rbxassetid://" .. currentAssetId
                 AudioFrame.Visible = true
                 VideoPreview.Visible = false
-            elseif data.Info.AssetType == 62 then -- Video
+            elseif data.Info.AssetType == 62 then
                 VideoPreview.Video = "rbxassetid://" .. currentAssetId
                 VideoPreview.Visible = true
                 AudioFrame.Visible = true
-                AssetPreview.Visible = false -- Hides the thumbnail image so it doesn't overlap behind the video
-                -- Detect Video Dimensions for correct shape
+                AssetPreview.Visible = false 
                 task.spawn(function()
                     repeat task.wait() until VideoPreview.Resolution ~= Vector2.new(0,0)
                     VideoAspect.AspectRatio = VideoPreview.Resolution.X / VideoPreview.Resolution.Y
@@ -359,7 +358,6 @@ TimeLabel.InputBegan:Connect(function(input)
 end)
 
 StopBtn.MouseButton1Click:Connect(function() 
-    -- Fixed Audio Stop logic
     AudioPlayer:Stop() 
     AudioPlayer.Playing = false
     AudioPlayer.TimePosition = 0
@@ -438,9 +436,59 @@ SaveBtn.MouseButton1Click:Connect(function()
                 SaveBtn.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
             end
         else
-            -- The short error message for PC executor limitations
-            SaveBtn.Text = "Denied - Insufficient permissions"
+            -- Download Failed -> Show "Denied"
+            SaveBtn.Text = "Denied"
             SaveBtn.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
+            task.wait(1)
+            
+            -- Attempt Image Download Instead
+            SaveBtn.Text = "Downloading image..."
+            SaveBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
+            
+            local thumbData = nil
+            pcall(function()
+                local thumbApiUrl = "https://thumbnails.roblox.com/v1/assets?assetIds=" .. currentAssetId .. "&returnPolicy=PlaceHolder&size=420x420&format=Png&isCircular=false"
+                local apiResponse = nil
+                
+                if reqFunc then
+                    local res = reqFunc({Url = thumbApiUrl, Method = "GET"})
+                    if res and res.Success then apiResponse = res.Body end
+                end
+                
+                if not apiResponse then
+                    apiResponse = game:HttpGet(thumbApiUrl)
+                end
+                
+                if apiResponse then
+                    local decoded = HttpService:JSONDecode(apiResponse)
+                    if decoded and decoded.data and decoded.data[1] and decoded.data[1].imageUrl then
+                        local imgUrl = decoded.data[1].imageUrl
+                        if reqFunc then
+                            local imgRes = reqFunc({Url = imgUrl, Method = "GET"})
+                            if imgRes and imgRes.Success then thumbData = imgRes.Body end
+                        end
+                        if not thumbData then
+                            thumbData = game:HttpGet(imgUrl)
+                        end
+                    end
+                end
+            end)
+            
+            if thumbData and #thumbData > 100 then
+                local thumbFileName = string.format("AssetViewer/%s_%s_Preview.png", safeName, currentAssetId)
+                local writeSuccess = pcall(function() writefile(thumbFileName, thumbData) end)
+                if writeSuccess then
+task.wait(1)
+                    SaveBtn.Text = "Saved to files!"
+                    SaveBtn.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
+                else
+                    SaveBtn.Text = "Executor non-compatible"
+                    SaveBtn.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
+                end
+            else
+                SaveBtn.Text = "Executor non-compatible"
+                SaveBtn.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
+            end
         end
 
         task.wait(3)
