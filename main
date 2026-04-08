@@ -1,350 +1,81 @@
-local queryArg = ... 
-
 local HttpService = game:GetService("HttpService")
 local MarketplaceService = game:GetService("MarketplaceService")
 local CoreGui = game:GetService("CoreGui")
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local ContentProvider = game:GetService("ContentProvider")
 
-local success, Icons = pcall(function()
-    return loadstring(game:HttpGet('https://raw.githubusercontent.com/stewingit/RayfieldBuilder/refs/heads/main/icons.lua'))()
-end)
+-- Asset Type Dictionary
+local AssetTypes = {
+    [1] = "Image", [2] = "T-Shirt", [3] = "Audio", [4] = "Mesh", [5] = "Lua",
+    [8] = "Hat", [9] = "Place", [10] = "Model", [11] = "Shirt", [12] = "Pants",
+    [13] = "Decal", [17] = "Head", [18] = "Face", [19] = "Gear", [21] = "Badge",
+    [24] = "Animation", [38] = "Plugin", [40] = "MeshPart", [61] = "Emote", [62] = "Video"
+}
 
-if not success or not Icons then
-    warn("Rayfield Icon Browser: Failed to load icons.")
-    return
-end
-
--- Shared Support Logic
-local function checkSupport(typeId)
-    local supportedIds = {1, 2, 11, 12, 13, 62}
-    for _, id in ipairs(supportedIds) do
-        if id == typeId then return true end
-    end
-    return false
-end
+-- Mapping for File Extensions
+local ExtensionMap = {
+    [1] = ".png", [2] = ".png", [3] = ".mp3", [11] = ".png", 
+    [12] = ".png", [13] = ".png", [62] = ".mp4", ["Default"] = ".rbxm"
+}
 
 -- Global Search Logic
 getgenv().search = function(query)
-    local results = {
-        LucideExists = false,
-        RobloxInfo = nil,
-        Query = query,
-        Status = "Unsupported | " .. query .. " | Not Found"
-    }
-    
-    -- 1. Check Roblox Asset ID (Numerical)
     local assetId = tonumber(query)
+    local results = { Success = false, Info = nil, Status = "Error | Invalid ID" }
+    
     if assetId then
-        local s, info = pcall(function() 
-            return MarketplaceService:GetProductInfo(assetId) 
-        end)
-        
+        local s, info = pcall(function() return MarketplaceService:GetProductInfo(assetId) end)
         if s and info then
-            local supported = checkSupport(info.AssetTypeId)
-            results.RobloxInfo = {
+            local typeName = AssetTypes[info.AssetTypeId] or ("Type ID: " .. info.AssetTypeId)
+            results.Success = true
+            results.Info = {
+                Id = assetId,
                 Name = info.Name,
-                IsSupported = supported,
-                AssetType = info.AssetTypeId
+                AssetType = info.AssetTypeId,
+                TypeName = typeName,
+                Creator = info.Creator.Name
             }
-            results.Status = string.format("Roblox Asset | %s | %s", info.Name, supported and "Supported" or "Unsupported")
-            getgenv().LastSearch = results
-            return results
+            results.Status = string.format("Found %s | %s", typeName, info.Name)
         else
-            results.Status = "Roblox Error | " .. query .. " | ID Not Found"
-            getgenv().LastSearch = results
-            return results
+            results.Status = "Roblox Error | ID Not Found or Private"
         end
     end
-
-    -- 2. Check Lucide Library (String)
-    if Icons["48px"] and Icons["48px"][query] then
-        results.LucideExists = true
-        results.Status = "Lucide Icon | " .. query .. " | Supported"
-    else
-        results.Status = "Lucide Icon | " .. query .. " | Unsupported"
-    end
-    
     getgenv().LastSearch = results
     return results
 end
 
--- HANDLE ARGUMENT MODE (Used by your external script)
-if queryArg and type(queryArg) == "string" and queryArg ~= "" then
-    -- Return the result immediately to the calling script
-    return getgenv().search(queryArg)
-end
-
 -- UI CODE START
-local PlayerGui = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+local PlayerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
 local Parent = (gethui and gethui()) or CoreGui or PlayerGui
 
-if Parent:FindFirstChild("RayfieldIconBrowser") then
-    Parent:FindFirstChild("RayfieldIconBrowser"):Destroy()
+if Parent:FindFirstChild("RayfieldAssetBrowser") then
+    Parent:FindFirstChild("RayfieldAssetBrowser"):Destroy()
 end
 
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "RayfieldIconBrowser"
-ScreenGui.ResetOnSpawn = false
+ScreenGui.Name = "RayfieldAssetBrowser"
 ScreenGui.Parent = Parent
 
 local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 450, 0, 520)
-MainFrame.Position = UDim2.new(0.5, -225, 0.5, -260)
+MainFrame.Size = UDim2.new(0, 450, 0, 500)
+MainFrame.Position = UDim2.new(0.5, -225, 0.5, -250)
 MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
 MainFrame.Draggable = true
 MainFrame.Parent = ScreenGui
-
-local MainCorner = Instance.new("UICorner")
-MainCorner.CornerRadius = UDim.new(0, 8)
-MainCorner.Parent = MainFrame
+Instance.new("UICorner").Parent = MainFrame
 
 local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Size = UDim2.new(1, -40, 0, 40)
 TitleLabel.Position = UDim2.new(0, 15, 0, 0)
 TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "Icons Supported by Rayfield"
+TitleLabel.Text = "Roblox Universal Asset Browser"
 TitleLabel.TextColor3 = Color3.new(1, 1, 1)
 TitleLabel.Font = Enum.Font.GothamBold
 TitleLabel.TextSize = 16
 TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
 TitleLabel.Parent = MainFrame
-
-local TabFrame = Instance.new("Frame")
-TabFrame.Size = UDim2.new(1, -30, 0, 30)
-TabFrame.Position = UDim2.new(0, 15, 0, 45)
-TabFrame.BackgroundTransparency = 1
-TabFrame.Parent = MainFrame
-
-local LucideBtn = Instance.new("TextButton")
-LucideBtn.Size = UDim2.new(0.5, -5, 1, 0)
-LucideBtn.Text = "Lucide Icons"
-LucideBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-LucideBtn.TextColor3 = Color3.new(1, 1, 1)
-LucideBtn.Font = Enum.Font.GothamBold
-LucideBtn.Parent = TabFrame
-Instance.new("UICorner").Parent = LucideBtn
-
-local AssetBtn = Instance.new("TextButton")
-AssetBtn.Size = UDim2.new(0.5, -5, 1, 0)
-AssetBtn.Position = UDim2.new(0.5, 5, 0, 0)
-AssetBtn.Text = "Roblox Asset Icons"
-AssetBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-AssetBtn.TextColor3 = Color3.new(0.6, 0.6, 0.6)
-AssetBtn.Font = Enum.Font.GothamBold
-AssetBtn.Parent = TabFrame
-Instance.new("UICorner").Parent = AssetBtn
-
-local LucideSection = Instance.new("Frame")
-LucideSection.Size = UDim2.new(1, 0, 1, -85)
-LucideSection.Position = UDim2.new(0, 0, 0, 85)
-LucideSection.BackgroundTransparency = 1
-LucideSection.Parent = MainFrame
-
-local AssetSection = Instance.new("Frame")
-AssetSection.Size = UDim2.new(1, 0, 1, -85)
-AssetSection.Position = UDim2.new(0, 0, 0, 85)
-AssetSection.BackgroundTransparency = 1
-AssetSection.Visible = false
-AssetSection.Parent = MainFrame
-
-local SearchBar = Instance.new("TextBox")
-SearchBar.Size = UDim2.new(1, -30, 0, 35)
-SearchBar.Position = UDim2.new(0, 15, 0, 5)
-SearchBar.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-SearchBar.PlaceholderText = "Search Lucide library..."
-SearchBar.Text = ""
-SearchBar.TextColor3 = Color3.new(1, 1, 1)
-SearchBar.Font = Enum.Font.Gotham
-SearchBar.Parent = LucideSection
-Instance.new("UICorner").Parent = SearchBar
-
-local Scroll = Instance.new("ScrollingFrame")
-Scroll.Size = UDim2.new(1, -20, 1, -55)
-Scroll.Position = UDim2.new(0, 10, 0, 50)
-Scroll.BackgroundTransparency = 1
-Scroll.BorderSizePixel = 0
-Scroll.ScrollBarThickness = 6
-Scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
-Scroll.Parent = LucideSection
-
-local UIGrid = Instance.new("UIGridLayout")
-UIGrid.CellSize = UDim2.new(0, 65, 0, 85)
-UIGrid.CellPadding = UDim2.new(0, 8, 0, 8)
-UIGrid.SortOrder = Enum.SortOrder.Name
-UIGrid.Parent = Scroll
-
-local currentAssetId = ""
-
-local IdInput = Instance.new("TextBox")
-IdInput.Text = ""
-IdInput.Name = "IdInput"
-IdInput.Size = UDim2.new(1, -110, 0, 40)
-IdInput.Position = UDim2.new(0, 15, 0, 5)
-IdInput.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-IdInput.PlaceholderText = "Enter Asset ID..."
-IdInput.TextColor3 = Color3.new(1, 1, 1)
-IdInput.Font = Enum.Font.Gotham
-IdInput.Parent = AssetSection
-Instance.new("UICorner").Parent = IdInput
-
-local AssetSearchBtn = Instance.new("TextButton")
-AssetSearchBtn.Size = UDim2.new(0, 80, 0, 40)
-AssetSearchBtn.Position = UDim2.new(1, -95, 0, 5)
-AssetSearchBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
-AssetSearchBtn.Text = "Search ID"
-AssetSearchBtn.TextColor3 = Color3.new(1, 1, 1)
-AssetSearchBtn.Font = Enum.Font.GothamBold
-AssetSearchBtn.Parent = AssetSection
-Instance.new("UICorner").Parent = AssetSearchBtn
-
-local AssetPreview = Instance.new("ImageButton")
-AssetPreview.Size = UDim2.new(0, 120, 0, 120)
-AssetPreview.Position = UDim2.new(0.5, -60, 0, 55)
-AssetPreview.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-AssetPreview.Image = "rbxassetid://0"
-AssetPreview.ScaleType = Enum.ScaleType.Fit
-AssetPreview.Parent = AssetSection
-Instance.new("UICorner").Parent = AssetPreview
-
-local PreviewLabel = Instance.new("TextLabel")
-PreviewLabel.Size = UDim2.new(1, 0, 0, 20)
-PreviewLabel.Position = UDim2.new(0, 0, 0, 175)
-PreviewLabel.BackgroundTransparency = 1
-PreviewLabel.Text = "Click image to copy ID"
-PreviewLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
-PreviewLabel.Font = Enum.Font.Gotham
-PreviewLabel.TextSize = 12
-PreviewLabel.Parent = AssetSection
-
-local AssetScroll = Instance.new("ScrollingFrame")
-AssetScroll.Size = UDim2.new(1, -30, 0, 185)
-AssetScroll.Position = UDim2.new(0, 15, 0, 200)
-AssetScroll.BackgroundTransparency = 0.95
-AssetScroll.BackgroundColor3 = Color3.new(0,0,0)
-AssetScroll.ScrollBarThickness = 4
-AssetScroll.Parent = AssetSection
-
-local AssetListLayout = Instance.new("UIListLayout")
-AssetListLayout.Padding = UDim.new(0, 5)
-AssetListLayout.Parent = AssetScroll
-
-local function setAssetPreview(id)
-    currentAssetId = tostring(id)
-    AssetPreview.Image = "rbxthumb://type=Asset&id=" .. id .. "&w=420&h=420"
-end
-
-AssetPreview.MouseButton1Click:Connect(function()
-    if currentAssetId ~= "" and currentAssetId ~= "0" then
-        setclipboard(currentAssetId)
-        local oldText = PreviewLabel.Text
-        PreviewLabel.Text = "COPIED ID: " .. currentAssetId
-        PreviewLabel.TextColor3 = Color3.fromRGB(0, 255, 150)
-        task.wait(1)
-        PreviewLabel.Text = oldText
-        PreviewLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
-    end
-end)
-
-local function addAssetResult(name)
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(1, -5, 0, 45)
-    btn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-    btn.Text = "  " .. name
-    btn.TextColor3 = Color3.new(1, 1, 1)
-    btn.TextXAlignment = Enum.TextXAlignment.Left
-    btn.Font = Enum.Font.Gotham
-    btn.TextSize = 12
-    btn.TextWrapped = true
-    btn.Parent = AssetScroll
-    Instance.new("UICorner").Parent = btn
-    return btn
-end
-
-AssetSearchBtn.MouseButton1Click:Connect(function()
-    local query = IdInput.Text
-    if query == "" then return end
-    
-    for _, v in pairs(AssetScroll:GetChildren()) do
-        if v:IsA("TextButton") then v:Destroy() end
-    end
-
-    local loadingBtn = addAssetResult("Searching...")
-    
-    task.spawn(function()
-        local data = getgenv().search(query)
-        loadingBtn.Text = "  " .. data.Status
-        
-        if data.RobloxInfo then
-            setAssetPreview(query)
-            loadingBtn.TextColor3 = data.RobloxInfo.IsSupported and Color3.fromRGB(0, 255, 150) or Color3.fromRGB(255, 100, 100)
-            loadingBtn.MouseButton1Click:Connect(function() setAssetPreview(query) end)
-        elseif data.LucideExists then
-            loadingBtn.TextColor3 = Color3.fromRGB(200, 200, 255)
-        else
-            loadingBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
-        end
-    end)
-end)
-
--- Initialize Lucide Icons
-for name, data in pairs(Icons["48px"]) do
-    local btn = Instance.new("ImageButton")
-    btn.Name = name
-    btn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-    btn.Parent = Scroll
-    Instance.new("UICorner").Parent = btn
-
-    local img = Instance.new("ImageLabel")
-    img.Size = UDim2.new(0, 30, 0, 30)
-    img.Position = UDim2.new(0.5, -15, 0.15, 0)
-    img.BackgroundTransparency = 1
-    img.Image = "rbxassetid://" .. data[1]
-    img.ImageRectSize = Vector2.new(data[2][1], data[2][2])
-    img.ImageRectOffset = Vector2.new(data[3][1], data[3][2])
-    img.Parent = btn
-    
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, -4, 0, 30)
-    label.Position = UDim2.new(0, 2, 1, -32)
-    label.BackgroundTransparency = 1
-    label.Text = name
-    label.TextColor3 = Color3.new(0.9, 0.9, 0.9)
-    label.TextSize = 11
-    label.Font = Enum.Font.GothamMedium
-    label.TextWrapped = true
-    label.Parent = btn
-
-    btn.MouseButton1Click:Connect(function()
-        setclipboard(name)
-        label.Text = "COPIED"
-        task.wait(0.7)
-        label.Text = name
-    end)
-end
-
-SearchBar:GetPropertyChangedSignal("Text"):Connect(function()
-    local query = SearchBar.Text:lower()
-    for _, item in pairs(Scroll:GetChildren()) do
-        if item:IsA("ImageButton") then
-            item.Visible = (item.Name:lower():find(query, 1, true) ~= nil)
-        end
-    end
-end)
-
-LucideBtn.MouseButton1Click:Connect(function()
-    LucideSection.Visible = true; AssetSection.Visible = false
-    LucideBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45); AssetBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-end)
-
-AssetBtn.MouseButton1Click:Connect(function()
-    LucideSection.Visible = false; AssetSection.Visible = true
-    AssetBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45); LucideBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-end)
-
-AssetListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-    AssetScroll.CanvasSize = UDim2.new(0, 0, 0, AssetListLayout.AbsoluteContentSize.Y)
-end)
 
 local CloseBtn = Instance.new("TextButton")
 CloseBtn.Size = UDim2.new(0, 30, 0, 30)
@@ -352,6 +83,343 @@ CloseBtn.Position = UDim2.new(1, -35, 0, 5)
 CloseBtn.Text = "X"
 CloseBtn.TextColor3 = Color3.new(1, 1, 1)
 CloseBtn.BackgroundTransparency = 1
-CloseBtn.Font = Enum.Font.GothamBold
 CloseBtn.Parent = MainFrame
-CloseBtn.MouseButton1Click:Connect(function() ScreenGui:Destroy() end)
+
+local IdInput = Instance.new("TextBox")
+IdInput.Size = UDim2.new(1, -110, 0, 40)
+IdInput.Position = UDim2.new(0, 15, 0, 45)
+IdInput.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+IdInput.PlaceholderText = "Enter Asset ID..."
+IdInput.Text = ""
+IdInput.TextColor3 = Color3.new(1, 1, 1)
+IdInput.Font = Enum.Font.Gotham
+IdInput.Parent = MainFrame
+Instance.new("UICorner").Parent = IdInput
+
+local AssetSearchBtn = Instance.new("TextButton")
+AssetSearchBtn.Size = UDim2.new(0, 80, 0, 40)
+AssetSearchBtn.Position = UDim2.new(1, -95, 0, 45)
+AssetSearchBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
+AssetSearchBtn.Text = "Search"
+AssetSearchBtn.TextColor3 = Color3.new(1, 1, 1)
+AssetSearchBtn.Font = Enum.Font.GothamBold
+AssetSearchBtn.Parent = MainFrame
+Instance.new("UICorner").Parent = AssetSearchBtn
+
+local StatusLabel = Instance.new("TextLabel")
+StatusLabel.Size = UDim2.new(1, -30, 0, 25)
+StatusLabel.Position = UDim2.new(0, 15, 0, 95)
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.Text = "Awaiting Search..."
+StatusLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+StatusLabel.Font = Enum.Font.Gotham
+StatusLabel.TextSize = 13
+StatusLabel.TextWrapped = true
+StatusLabel.Parent = MainFrame
+
+--- PREVIEW & LOADING SECTION ---
+local PreviewContainer = Instance.new("Frame")
+PreviewContainer.Size = UDim2.new(0, 340, 0, 190) -- Increased size to fit the area better
+PreviewContainer.Position = UDim2.new(0.5, -170, 0, 125)
+PreviewContainer.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+PreviewContainer.Parent = MainFrame
+Instance.new("UICorner").Parent = PreviewContainer
+
+local LoadingIcon = Instance.new("ImageLabel")
+LoadingIcon.Size = UDim2.new(0, 50, 0, 50)
+LoadingIcon.Position = UDim2.new(0.5, -25, 0.5, -25)
+LoadingIcon.BackgroundTransparency = 1
+LoadingIcon.Image = "rbxassetid://483448923"
+LoadingIcon.ImageColor3 = Color3.fromRGB(0, 120, 215)
+LoadingIcon.ZIndex = 5
+LoadingIcon.Visible = false
+LoadingIcon.Parent = PreviewContainer
+
+task.spawn(function()
+    while LoadingIcon do
+        LoadingIcon.Rotation = LoadingIcon.Rotation + 6
+        task.wait()
+    end
+end)
+
+local AssetPreview = Instance.new("ImageLabel")
+AssetPreview.Size = UDim2.new(1, 0, 1, 0)
+AssetPreview.BackgroundTransparency = 1 
+AssetPreview.ImageTransparency = 1
+AssetPreview.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+AssetPreview.ScaleType = Enum.ScaleType.Fit
+AssetPreview.ZIndex = 10
+AssetPreview.Parent = PreviewContainer
+Instance.new("UICorner").Parent = AssetPreview
+
+local VideoPreview = Instance.new("VideoFrame")
+VideoPreview.Size = UDim2.new(1, 0, 1, 0)
+VideoPreview.BackgroundTransparency = 1
+VideoPreview.ZIndex = 11
+VideoPreview.Visible = false
+VideoPreview.Parent = PreviewContainer
+Instance.new("UICorner").Parent = VideoPreview
+
+-- Fixed Aspect Ratio logic
+local VideoAspect = Instance.new("UIAspectRatioConstraint")
+VideoAspect.DominantAxis = Enum.DominantAxis.Width
+VideoAspect.AspectType = Enum.AspectType.FitWithinMaxSize
+VideoAspect.Parent = VideoPreview
+----------------------------------
+
+local AudioFrame = Instance.new("Frame")
+AudioFrame.Size = UDim2.new(1, -30, 0, 40)
+AudioFrame.Position = UDim2.new(0, 15, 0, 325)
+AudioFrame.BackgroundTransparency = 1
+AudioFrame.Visible = false
+AudioFrame.Parent = MainFrame
+
+local AudioPlayer = Instance.new("Sound")
+AudioPlayer.Parent = MainFrame
+
+local PlayBtn = Instance.new("TextButton")
+PlayBtn.Size = UDim2.new(0.25, 0, 1, 0)
+PlayBtn.BackgroundColor3 = Color3.fromRGB(40, 200, 100)
+PlayBtn.Text = "Play"
+PlayBtn.TextColor3 = Color3.new(1, 1, 1)
+PlayBtn.Font = Enum.Font.GothamBold
+PlayBtn.Parent = AudioFrame
+Instance.new("UICorner").Parent = PlayBtn
+
+local TimeLabel = Instance.new("TextLabel")
+TimeLabel.Size = UDim2.new(0.4, 0, 1, 0)
+TimeLabel.Position = UDim2.new(0.3, 0, 0, 0)
+TimeLabel.BackgroundTransparency = 1
+TimeLabel.Active = true 
+TimeLabel.Text = "00:00 / 00:00"
+TimeLabel.TextColor3 = Color3.new(1, 1, 1)
+TimeLabel.Font = Enum.Font.Code
+TimeLabel.TextSize = 12
+TimeLabel.Parent = AudioFrame
+
+local StopBtn = Instance.new("TextButton")
+StopBtn.Size = UDim2.new(0.25, 0, 1, 0)
+StopBtn.Position = UDim2.new(0.75, 0, 0, 0)
+StopBtn.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
+StopBtn.Text = "Stop"
+StopBtn.TextColor3 = Color3.new(1, 1, 1)
+StopBtn.Font = Enum.Font.GothamBold
+StopBtn.Parent = AudioFrame
+Instance.new("UICorner").Parent = StopBtn
+
+local ActionFrame = Instance.new("Frame")
+ActionFrame.Size = UDim2.new(1, -30, 0, 45)
+ActionFrame.Position = UDim2.new(0, 15, 1, -60)
+ActionFrame.BackgroundTransparency = 1
+ActionFrame.Parent = MainFrame
+
+local CopyBtn = Instance.new("TextButton")
+CopyBtn.Size = UDim2.new(0.48, 0, 1, 0)
+CopyBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+CopyBtn.Text = "Copy ID"
+CopyBtn.TextColor3 = Color3.new(1, 1, 1)
+CopyBtn.Parent = ActionFrame
+Instance.new("UICorner").Parent = CopyBtn
+
+local SaveBtn = Instance.new("TextButton")
+SaveBtn.Size = UDim2.new(0.48, 0, 1, 0)
+SaveBtn.Position = UDim2.new(0.52, 0, 0, 0)
+SaveBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+SaveBtn.Text = "Download Asset"
+SaveBtn.TextColor3 = Color3.new(1, 1, 1)
+SaveBtn.Parent = ActionFrame
+Instance.new("UICorner").Parent = SaveBtn
+
+local currentAssetId = ""
+local currentAssetInfo = nil
+
+local function formatTime(seconds)
+    local mins = math.floor(seconds / 60)
+    local secs = math.floor(seconds % 60)
+    return string.format("%02d:%02d", mins, secs)
+end
+
+-- Timer Loop Logic
+task.spawn(function()
+    while task.wait(0.1) do
+        if AudioFrame.Visible then
+            local activePlayer = (currentAssetInfo and currentAssetInfo.AssetType == 62) and VideoPreview or AudioPlayer
+            local current = activePlayer.TimePosition or 0
+            local total = activePlayer.TimeLength or 0
+            
+            if total == 0 then
+                TimeLabel.Text = "Loading..."
+            else
+                TimeLabel.Text = formatTime(current) .. " / " .. formatTime(total)
+            end
+        end
+    end
+end)
+
+-- Reset Play Button when media ends naturally
+AudioPlayer.Ended:Connect(function()
+    PlayBtn.Text = "Play"
+end)
+
+VideoPreview.Ended:Connect(function()
+    PlayBtn.Text = "Play"
+    VideoPreview.TimePosition = 0
+end)
+
+AssetSearchBtn.MouseButton1Click:Connect(function()
+    local query = IdInput.Text
+    if query == "" then return end
+    
+    AudioPlayer:Stop()
+    VideoPreview.Playing = false
+    VideoPreview.TimePosition = 0
+    PlayBtn.Text = "Play" 
+    VideoPreview.Visible = false
+    AudioFrame.Visible = false
+    AssetPreview.Visible = true -- Default to visible
+    
+    StatusLabel.Text = "Searching..."
+    LoadingIcon.Visible = true
+    AssetPreview.ImageTransparency = 1
+    AssetPreview.BackgroundTransparency = 1
+    
+    task.spawn(function()
+        local data = getgenv().search(query)
+        StatusLabel.Text = data.Status
+        
+        if data.Success then
+            currentAssetId = tostring(data.Info.Id)
+            currentAssetInfo = data.Info
+            
+            local thumbUrl = "rbxthumb://type=Asset&id=" .. currentAssetId .. "&w=420&h=420"
+            AssetPreview.Image = thumbUrl
+            
+            pcall(function() ContentProvider:PreloadAsync({AssetPreview}) end)
+            
+            AssetPreview.ImageTransparency = 0
+            AssetPreview.BackgroundTransparency = 0 
+            
+            if data.Info.AssetType == 3 then -- Audio
+                AudioPlayer.SoundId = "rbxassetid://" .. currentAssetId
+                AudioFrame.Visible = true
+                VideoPreview.Visible = false
+            elseif data.Info.AssetType == 62 then -- Video
+                VideoPreview.Video = "rbxassetid://" .. currentAssetId
+                VideoPreview.Visible = true
+                AudioFrame.Visible = true
+                AssetPreview.Visible = false -- Hides the thumbnail image so it doesn't overlap behind the video
+                -- Detect Video Dimensions for correct shape
+                task.spawn(function()
+                    repeat task.wait() until VideoPreview.Resolution ~= Vector2.new(0,0)
+                    VideoAspect.AspectRatio = VideoPreview.Resolution.X / VideoPreview.Resolution.Y
+                end)
+            end
+        else
+            AssetPreview.Image = "rbxassetid://0"
+            AssetPreview.BackgroundTransparency = 0
+            AssetPreview.ImageTransparency = 0
+            AudioFrame.Visible = false
+        end
+        LoadingIcon.Visible = false
+    end)
+end)
+
+local function toggleMedia()
+    if currentAssetInfo then
+        if currentAssetInfo.AssetType == 62 then
+            if VideoPreview.Playing then 
+                VideoPreview.Playing = false 
+                PlayBtn.Text = "Play"
+            else 
+                VideoPreview.Playing = true 
+                PlayBtn.Text = "Pause"
+            end
+        elseif currentAssetInfo.AssetType == 3 then
+            if AudioPlayer.IsPlaying then 
+                AudioPlayer:Pause() 
+                PlayBtn.Text = "Play"
+            else 
+                if AudioPlayer.IsPaused then
+                    AudioPlayer:Resume()
+                else
+                    AudioPlayer:Play()
+                end
+                PlayBtn.Text = "Pause"
+            end
+        end
+    end
+end
+
+PlayBtn.MouseButton1Click:Connect(toggleMedia)
+
+TimeLabel.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        toggleMedia()
+    end
+end)
+
+StopBtn.MouseButton1Click:Connect(function() 
+    -- Fixed Audio Stop logic
+    AudioPlayer:Stop() 
+    AudioPlayer.Playing = false
+    AudioPlayer.TimePosition = 0
+    
+    VideoPreview.Playing = false
+    VideoPreview.TimePosition = 0
+    PlayBtn.Text = "Play"
+end)
+
+CopyBtn.MouseButton1Click:Connect(function()
+    if currentAssetId ~= "" then
+        setclipboard(currentAssetId)
+        CopyBtn.Text = "Copied!"
+        task.wait(1)
+        CopyBtn.Text = "Copy ID"
+    end
+end)
+
+SaveBtn.MouseButton1Click:Connect(function()
+    if currentAssetId ~= "" and currentAssetInfo then
+        if writefile then
+            if isfolder and not isfolder("AssetViewer") then makefolder("AssetViewer") end
+            local oldText = SaveBtn.Text
+            SaveBtn.Text = "Downloading..."
+            SaveBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
+
+            task.spawn(function()
+                local ext = ExtensionMap[currentAssetInfo.AssetType] or ExtensionMap["Default"]
+                local safeName = currentAssetInfo.Name:gsub("[^%w%s]", "")
+                local fileName = string.format("AssetViewer/%s_%s%s", safeName, currentAssetId, ext)
+
+                local success, rawData = pcall(function()
+                    return game:HttpGet("https://assetdelivery.roblox.com/v1/asset/?id=" .. currentAssetId)
+                end)
+
+                if success and rawData then
+                    local writeSuccess, err = pcall(function() writefile(fileName, rawData) end)
+                    if writeSuccess then
+                        SaveBtn.Text = "Saved " .. ext:upper() .. "!"
+                        SaveBtn.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
+                    else
+                        SaveBtn.Text = "Write Error"
+                        SaveBtn.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
+                    end
+                else
+                    SaveBtn.Text = "Download Failed"
+                    SaveBtn.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
+                end
+                task.wait(2)
+                SaveBtn.Text = oldText
+                SaveBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+            end)
+        else
+            SaveBtn.Text = "writefile not supported"
+        end
+    end
+end)
+
+CloseBtn.MouseButton1Click:Connect(function()
+    AudioPlayer:Stop()
+    VideoPreview.Playing = false
+    ScreenGui:Destroy()
+end)
