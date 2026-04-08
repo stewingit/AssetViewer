@@ -595,35 +595,40 @@ SaveBtn.MouseButton1Click:Connect(function()
             if isfolder and not isfolder("AssetViewer") then makefolder("AssetViewer") end
         end)
 
-        local ext = ExtensionMap[currentAssetInfo.AssetType] or ExtensionMap["Default"]
+        local assetType = currentAssetInfo.AssetType
+        local ext = ExtensionMap[assetType] or ExtensionMap["Default"]
         local safeName = currentAssetInfo.Name:gsub("[^%w%s]", "")
-        local fileName = string.format("AssetViewer/%s_%s%s", safeName, currentAssetId, ext)
-        local url = "https://assetdelivery.roblox.com/v1/asset/?id=" .. currentAssetId
-        
         local rawData = nil
         local reqFunc = (syn and syn.request) or (http and http.request) or http_request or request
 
-        if reqFunc then
-            local success, response = pcall(function()
-                return reqFunc({
-                    Url = url,
-                    Method = "GET",
-                    Headers = { ["User-Agent"] = "Roblox/WinInet" }
-                })
-            end)
-            if success and response.Success and #response.Body > 500 then
-                rawData = response.Body
+        -- Step 1: Attempt raw download ONLY if it's not an Image (Type 1)
+        if assetType ~= 1 then
+            local url = "https://assetdelivery.roblox.com/v1/asset/?id=" .. currentAssetId
+            if reqFunc then
+                local success, response = pcall(function()
+                    return reqFunc({
+                        Url = url,
+                        Method = "GET",
+                        Headers = { ["User-Agent"] = "Roblox/WinInet" }
+                    })
+                end)
+                if success and response.Success and #response.Body > 500 then
+                    rawData = response.Body
+                end
+            end
+
+            if not rawData then
+                pcall(function() 
+                    local res = game:HttpGet(url)
+                    if res and #res > 500 then rawData = res end
+                end)
             end
         end
 
-        if not rawData then
-            pcall(function() 
-                local res = game:HttpGet(url)
-                if res and #res > 500 then rawData = res end
-            end)
-        end
-
+        -- Step 2: Handle Saving
         if rawData then
+            -- This handles Models/Audio/etc that successfully downloaded raw
+            local fileName = string.format("AssetViewer/%s_%s%s", safeName, currentAssetId, ext)
             local writeSuccess = pcall(function() writefile(fileName, rawData) end)
             if writeSuccess then
                 SaveBtn.Text = "Saved to files!"
@@ -633,10 +638,15 @@ SaveBtn.MouseButton1Click:Connect(function()
                 SaveBtn.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
             end
         else
-            SaveBtn.Text = "Denied"
-            SaveBtn.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
-            task.wait(1)
+            -- Step 3: Fallback logic (Used for Images OR Denied Raw Assets)
+            -- If it was a model/audio that failed, show "Denied" first
+            if assetType ~= 1 then
+                SaveBtn.Text = "Denied"
+                SaveBtn.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
+                task.wait(1)
+            end
             
+            -- Show the specific image download text/color from your script
             SaveBtn.Text = "Downloading image..."
             SaveBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
         
@@ -650,9 +660,7 @@ SaveBtn.MouseButton1Click:Connect(function()
                     if res and res.Success then apiResponse = res.Body end
                 end
                 
-                if not apiResponse then
-                    apiResponse = game:HttpGet(thumbApiUrl)
-                end
+                if not apiResponse then apiResponse = game:HttpGet(thumbApiUrl) end
                 
                 if apiResponse then
                     local decoded = HttpService:JSONDecode(apiResponse)
@@ -662,18 +670,16 @@ SaveBtn.MouseButton1Click:Connect(function()
                             local imgRes = reqFunc({Url = imgUrl, Method = "GET"})
                             if imgRes and imgRes.Success then thumbData = imgRes.Body end
                         end
-                        if not thumbData then
-                            thumbData = game:HttpGet(imgUrl)
-                        end
+                        if not thumbData then thumbData = game:HttpGet(imgUrl) end
                     end
                 end
             end)
             
             if thumbData and #thumbData > 100 then
-                local thumbFileName = string.format("AssetViewer/%s_%s_Preview.png", safeName, currentAssetId)
+                local thumbFileName = string.format("AssetViewer/%s_%s.png", safeName, currentAssetId)
                 local writeSuccess = pcall(function() writefile(thumbFileName, thumbData) end)
                 if writeSuccess then
-                    task.wait(1)
+                    task.wait(1) -- Keeping your original timing
                     SaveBtn.Text = "Saved to files!"
                     SaveBtn.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
                 else
@@ -691,6 +697,7 @@ SaveBtn.MouseButton1Click:Connect(function()
         SaveBtn.BackgroundColor3 = oldColor
     end)
 end)
+
 
 CloseBtn.MouseButton1Click:Connect(function()
     AudioPlayer:Stop()
