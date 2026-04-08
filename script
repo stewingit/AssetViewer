@@ -379,43 +379,74 @@ CopyBtn.MouseButton1Click:Connect(function()
 end)
 
 SaveBtn.MouseButton1Click:Connect(function()
-    if currentAssetId ~= "" and currentAssetInfo then
-        if writefile then
-            if isfolder and not isfolder("AssetViewer") then makefolder("AssetViewer") end
-            local oldText = SaveBtn.Text
-            SaveBtn.Text = "Downloading..."
-            SaveBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
-
-            task.spawn(function()
-                local ext = ExtensionMap[currentAssetInfo.AssetType] or ExtensionMap["Default"]
-                local safeName = currentAssetInfo.Name:gsub("[^%w%s]", "")
-                local fileName = string.format("AssetViewer/%s_%s%s", safeName, currentAssetId, ext)
-
-                local success, rawData = pcall(function()
-                    return game:HttpGet("https://assetdelivery.roblox.com/v1/asset/?id=" .. currentAssetId)
-                end)
-
-                if success and rawData then
-                    local writeSuccess, err = pcall(function() writefile(fileName, rawData) end)
-                    if writeSuccess then
-                        SaveBtn.Text = "Saved " .. ext:upper() .. "!"
-                        SaveBtn.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
-                    else
-                        SaveBtn.Text = "Write Error"
-                        SaveBtn.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
-                    end
-                else
-                    SaveBtn.Text = "Download Failed"
-                    SaveBtn.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
-                end
-                task.wait(2)
-                SaveBtn.Text = oldText
-                SaveBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-            end)
-        else
-            SaveBtn.Text = "writefile not supported"
-        end
+    if currentAssetId == "" or not currentAssetInfo then return end
+    
+    local oldText = SaveBtn.Text
+    local oldColor = SaveBtn.BackgroundColor3
+    
+    if not writefile then 
+        SaveBtn.Text = "No writefile Support"
+        return 
     end
+
+    SaveBtn.Text = "Downloading..."
+    SaveBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
+
+    task.spawn(function()
+        pcall(function()
+            if isfolder and not isfolder("AssetViewer") then makefolder("AssetViewer") end
+        end)
+
+        local ext = ExtensionMap[currentAssetInfo.AssetType] or ExtensionMap["Default"]
+        local safeName = currentAssetInfo.Name:gsub("[^%w%s]", "")
+        local fileName = string.format("AssetViewer/%s_%s%s", safeName, currentAssetId, ext)
+        local url = "https://assetdelivery.roblox.com/v1/asset/?id=" .. currentAssetId
+        
+        local rawData = nil
+        local reqFunc = (syn and syn.request) or (http and http.request) or http_request or request
+
+        -- Attempt download
+        if reqFunc then
+            local success, response = pcall(function()
+                return reqFunc({
+                    Url = url,
+                    Method = "GET",
+                    Headers = { ["User-Agent"] = "Roblox/WinInet" }
+                })
+            end)
+            if success and response.Success and #response.Body > 500 then
+                rawData = response.Body
+            end
+        end
+
+        -- Secondary Fallback
+        if not rawData then
+            pcall(function() 
+                local res = game:HttpGet(url)
+                if res and #res > 500 then rawData = res end
+            end)
+        end
+
+        -- Result Handling
+        if rawData then
+            local writeSuccess = pcall(function() writefile(fileName, rawData) end)
+            if writeSuccess then
+                SaveBtn.Text = "Saved to files!"
+                SaveBtn.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
+            else
+                SaveBtn.Text = "Write Permission Error"
+                SaveBtn.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
+            end
+        else
+            -- The short error message for PC executor limitations
+            SaveBtn.Text = "Denied - Insufficient permissions"
+            SaveBtn.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
+        end
+
+        task.wait(3)
+        SaveBtn.Text = oldText
+        SaveBtn.BackgroundColor3 = oldColor
+    end)
 end)
 
 CloseBtn.MouseButton1Click:Connect(function()
