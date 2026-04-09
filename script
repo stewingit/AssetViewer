@@ -136,14 +136,16 @@ AssetSearchBtn.Parent = MainFrame
 Instance.new("UICorner").Parent = AssetSearchBtn
 
 local StatusLabel = Instance.new("TextLabel")
-StatusLabel.Size = UDim2.new(1, -30, 0, 25)
+StatusLabel.Size = UDim2.new(1, -30, 0, 160) -- Kept the height for your lines
 StatusLabel.Position = UDim2.new(0, 15, 0, 95)
 StatusLabel.BackgroundTransparency = 1
-StatusLabel.Text = "Awaiting Search..."
+StatusLabel.Text = "Awaiting Search...\n\n\n\n\n\n\n ● Always use this script on an alt\n ● Downloading depends entirely\n on your executor\n ● Mobile executors work best\n ● I am not responsible for bans"
 StatusLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
-StatusLabel.Font = Enum.Font.GothamBold -- Unified Font
+StatusLabel.Font = Enum.Font.GothamBold
 StatusLabel.TextSize = 13
 StatusLabel.TextWrapped = true
+StatusLabel.TextYAlignment = Enum.TextYAlignment.Top
+StatusLabel.ZIndex = 20 -- Increased ZIndex to put it ON TOP of other elements
 StatusLabel.Parent = MainFrame
 
 --- PREVIEW & LOADING SECTION ---
@@ -299,6 +301,7 @@ Instance.new("UICorner").Parent = SaveBtn
 local currentAssetId = ""
 local currentAssetInfo = nil
 local spawnedObjects = {} -- Track models for deletion
+local confirmingImageDownload = false -- NEW: Track if user is being asked to download image instead
 
 local function formatTime(seconds)
     local mins = math.floor(seconds / 60)
@@ -337,6 +340,7 @@ AssetSearchBtn.MouseButton1Click:Connect(function()
     local query = IdInput.Text
     if query == "" then return end
     
+    confirmingImageDownload = false -- Reset download state on new search
     AudioPlayer:Stop()
     VideoPreview.Playing = false
     VideoPreview.TimePosition = 0
@@ -374,6 +378,8 @@ AssetSearchBtn.MouseButton1Click:Connect(function()
             AssetPreview.BackgroundTransparency = 0 
             
             local atype = data.Info.AssetType
+            local typeName = AssetTypes[atype] or "Asset"
+            SaveBtn.Text = "Download " .. typeName -- Set button text to specific type
             
             -- Handle dynamic button positioning using pure offset limits so minimize works cleanly
             local isModel = (atype == 10 or atype == 4 or atype == 8 or atype == 19 or atype == 40 or atype == 61)
@@ -419,6 +425,7 @@ AssetSearchBtn.MouseButton1Click:Connect(function()
             AssetPreview.BackgroundTransparency = 0
             AssetPreview.ImageTransparency = 0
             AudioFrame.Visible = false
+            SaveBtn.Text = "Download Asset"
         end
         LoadingIcon.Visible = false
     end)
@@ -579,122 +586,111 @@ end)
 SaveBtn.MouseButton1Click:Connect(function()
     if currentAssetId == "" or not currentAssetInfo then return end
     
-    local oldText = SaveBtn.Text
-    local oldColor = SaveBtn.BackgroundColor3
+    local oldText = "Download " .. (AssetTypes[currentAssetInfo.AssetType] or "Asset")
+    local oldColor = Color3.fromRGB(45, 45, 45) -- The default dark grey
+    local assetType = currentAssetInfo.AssetType
+    local typeName = AssetTypes[assetType] or "Asset"
     
     if not writefile then 
         SaveBtn.Text = "No writefile Support"
         return 
     end
 
+    -- Logic for the secondary image download
+    local function downloadAsImage()
+        SaveBtn.Text = "Downloading image..."
+        SaveBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 215) -- Blue
+        
+        local safeName = currentAssetInfo.Name:gsub("[^%w%s]", "")
+        local thumbData = nil
+        
+        local thumbApiUrl = "https://thumbnails.roblox.com/v1/assets?assetIds=" .. currentAssetId .. "&returnPolicy=PlaceHolder&size=420x420&format=Png&isCircular=false"
+        local success, apiResponse = pcall(function() return game:HttpGet(thumbApiUrl) end)
+        
+        if success and apiResponse then
+            local decoded = HttpService:JSONDecode(apiResponse)
+            if decoded and decoded.data and decoded.data[1] and decoded.data[1].imageUrl then
+                local imgUrl = decoded.data[1].imageUrl
+                local imgSuccess, imgData = pcall(function() return game:HttpGet(imgUrl) end)
+                if imgSuccess then thumbData = imgData end
+            end
+        end
+        
+        if thumbData and #thumbData > 100 then
+            local thumbFileName = string.format("AssetViewer/%s_%s.png", safeName, currentAssetId)
+            writefile(thumbFileName, thumbData)
+            SaveBtn.Text = "Saved to files!"
+            SaveBtn.BackgroundColor3 = Color3.fromRGB(100, 200, 100) -- Green
+        else
+            SaveBtn.Text = "Download Failed"
+            SaveBtn.BackgroundColor3 = Color3.fromRGB(255, 100, 100) -- Red
+        end
+
+        task.wait(3)
+        SaveBtn.Text = oldText
+        SaveBtn.BackgroundColor3 = oldColor
+    end
+
+    -- STEP 2: If the user clicks while "confirmingImageDownload" is true
+    if confirmingImageDownload then
+        confirmingImageDownload = false
+        task.spawn(downloadAsImage)
+        return
+    end
+
+    -- STEP 1: Initial Attempt
     SaveBtn.Text = "Downloading..."
-    SaveBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
+    SaveBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 215) -- Blue
 
     task.spawn(function()
         pcall(function()
             if isfolder and not isfolder("AssetViewer") then makefolder("AssetViewer") end
         end)
 
-        local assetType = currentAssetInfo.AssetType
         local ext = ExtensionMap[assetType] or ExtensionMap["Default"]
         local safeName = currentAssetInfo.Name:gsub("[^%w%s]", "")
         local rawData = nil
-        local reqFunc = (syn and syn.request) or (http and http.request) or http_request or request
 
-        -- Step 1: Attempt raw download ONLY if it's not an Image (Type 1)
         if assetType ~= 1 then
             local url = "https://assetdelivery.roblox.com/v1/asset/?id=" .. currentAssetId
-            if reqFunc then
-                local success, response = pcall(function()
-                    return reqFunc({
-                        Url = url,
-                        Method = "GET",
-                        Headers = { ["User-Agent"] = "Roblox/WinInet" }
-                    })
-                end)
-                if success and response.Success and #response.Body > 500 then
-                    rawData = response.Body
-                end
-            end
-
-            if not rawData then
-                pcall(function() 
-                    local res = game:HttpGet(url)
-                    if res and #res > 500 then rawData = res end
-                end)
-            end
+            local s, res = pcall(function() return game:HttpGet(url) end)
+            if s and #res > 500 then rawData = res end
         end
 
-        -- Step 2: Handle Saving
         if rawData then
-            -- This handles Models/Audio/etc that successfully downloaded raw
             local fileName = string.format("AssetViewer/%s_%s%s", safeName, currentAssetId, ext)
-            local writeSuccess = pcall(function() writefile(fileName, rawData) end)
-            if writeSuccess then
-                SaveBtn.Text = "Saved to files!"
-                SaveBtn.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
-            else
-                SaveBtn.Text = "Write Permission Error"
-                SaveBtn.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
-            end
+            writefile(fileName, rawData)
+            SaveBtn.Text = "Saved to files!"
+            SaveBtn.BackgroundColor3 = Color3.fromRGB(100, 200, 100) -- Green
+            task.wait(3)
+            SaveBtn.Text = oldText
+            SaveBtn.BackgroundColor3 = oldColor
         else
-            -- Step 3: Fallback logic (Used for Images OR Denied Raw Assets)
-            -- If it was a model/audio that failed, show "Denied" first
+            -- FAIL FLOW
             if assetType ~= 1 then
+                -- 1. Show Denied (Red)
                 SaveBtn.Text = "Denied"
                 SaveBtn.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
                 task.wait(1)
-            end
-            
-            -- Show the specific image download text/color from your script
-            SaveBtn.Text = "Downloading image..."
-            SaveBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
-        
-            local thumbData = nil
-            pcall(function()
-                local thumbApiUrl = "https://thumbnails.roblox.com/v1/assets?assetIds=" .. currentAssetId .. "&returnPolicy=PlaceHolder&size=420x420&format=Png&isCircular=false"
-                local apiResponse = nil
                 
-                if reqFunc then
-                    local res = reqFunc({Url = thumbApiUrl, Method = "GET"})
-                    if res and res.Success then apiResponse = res.Body end
-                end
+                -- 2. Switch to Prompt (Blue)
+                confirmingImageDownload = true
+                SaveBtn.Text = "Download image instead?"
+                SaveBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
                 
-                if not apiResponse then apiResponse = game:HttpGet(thumbApiUrl) end
-                
-                if apiResponse then
-                    local decoded = HttpService:JSONDecode(apiResponse)
-                    if decoded and decoded.data and decoded.data[1] and decoded.data[1].imageUrl then
-                        local imgUrl = decoded.data[1].imageUrl
-                        if reqFunc then
-                            local imgRes = reqFunc({Url = imgUrl, Method = "GET"})
-                            if imgRes and imgRes.Success then thumbData = imgRes.Body end
-                        end
-                        if not thumbData then thumbData = game:HttpGet(imgUrl) end
+                -- 3. Reset if not clicked after 4 seconds
+                task.delay(4, function()
+                    if confirmingImageDownload then
+                        confirmingImageDownload = false
+                        SaveBtn.Text = oldText
+                        SaveBtn.BackgroundColor3 = oldColor
                     end
-                end
-            end)
-            
-            if thumbData and #thumbData > 100 then
-                local thumbFileName = string.format("AssetViewer/%s_%s.png", safeName, currentAssetId)
-                local writeSuccess = pcall(function() writefile(thumbFileName, thumbData) end)
-                if writeSuccess then
-                    task.wait(1) -- Keeping your original timing
-                    SaveBtn.Text = "Saved to files!"
-                    SaveBtn.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
-                else
-                    SaveBtn.Text = "Executor non-compatible"
-                    SaveBtn.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
-                end
+                end)
             else
-                SaveBtn.Text = "Executor non-compatible"
-                SaveBtn.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
+                -- If it's just an image and it failed raw, try thumb method immediately
+                downloadAsImage()
             end
         end
-
-        task.wait(3)
-        SaveBtn.Text = oldText
-        SaveBtn.BackgroundColor3 = oldColor
     end)
 end)
 
